@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Буханка</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FBF7EF;
+    --surface:#FFFFFF;
+    --surface-alt:#F1E8D8;
+    --ink:#2B2118;
+    --muted:#8A7A68;
+    --line:#E8DCC6;
+    --accent:#3F5A46;
+    --accent-ink:#EFF5F0;
+    --accent2:#C98A2B;
+    --danger:#A23E3E;
+    --radius-lg:22px;
+    --radius-md:16px;
+    --radius-sm:11px;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#1B1712;
+      --surface:#241F19;
+      --surface-alt:#2E2820;
+      --ink:#F3ECDF;
+      --muted:#A8998A;
+      --line:#3A3226;
+      --accent:#7FA98C;
+      --accent-ink:#16211A;
+      --accent2:#E0A94A;
+      --danger:#D9807E;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#1B1712;
+    --surface:#241F19;
+    --surface-alt:#2E2820;
+    --ink:#F3ECDF;
+    --muted:#A8998A;
+    --line:#3A3226;
+    --accent:#7FA98C;
+    --accent-ink:#16211A;
+    --accent2:#E0A94A;
+    --danger:#D9807E;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Manrope",system-ui,sans-serif;
+    -webkit-tap-highlight-color:transparent;
+    overscroll-behavior-y:none;
+  }
+  img{max-width:100%;}
+  [hidden]{display:none!important;}
+
+  h1,h2,h3,.display{
+    font-family:"Fraunces",Georgia,serif;
+    text-wrap:balance;
+    letter-spacing:-0.01em;
+  }
+
+  .app{
+    max-width:480px;
+    margin:0 auto;
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+  }
+
+  /* ---------- Header ---------- */
+  header.top{
+    position:sticky;
+    top:env(safe-area-inset-top,0px);
+    z-index:20;
+    background:var(--bg);
+    padding:18px 18px 10px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    border-bottom:1px solid transparent;
+    transition:border-color .2s, box-shadow .2s;
+  }
+  header.top.scrolled{
+    border-color:var(--line);
+    box-shadow:0 6px 16px -12px rgba(0,0,0,.35);
+  }
+  .brand{display:flex;align-items:center;gap:11px;}
+  .brand-mark{
+    width:42px;height:42px;border-radius:13px;
+    background:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;
+  }
+  .brand-mark svg{width:24px;height:24px;}
+  .brand-text h1{margin:0;font-size:21px;font-weight:600;line-height:1.05;color:var(--ink);}
+  .brand-text p{margin:2px 0 0;font-size:11.5px;color:var(--muted);letter-spacing:.03em;text-transform:uppercase;}
+
+  .icon-btn{
+    width:40px;height:40px;border-radius:50%;
+    border:1px solid var(--line);
+    background:var(--surface);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .icon-btn svg{width:19px;height:19px;}
+
+  /* ---------- Category chips ---------- */
+  .chips{
+    display:flex;
+    gap:8px;
+    padding:6px 18px 14px;
+    overflow-x:auto;
+    scrollbar-width:none;
+    position:sticky;
+    top:calc(env(safe-area-inset-top,0px) + 66px);
+    background:var(--bg);
+    z-index:19;
+  }
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex-shrink:0;
+    padding:9px 16px;
+    border-radius:100px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    color:var(--muted);
+    font-size:13.5px;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+    transition:background .15s, color .15s, border-color .15s;
+  }
+  .chip.active{
+    background:var(--accent);
+    color:var(--accent-ink);
+    border-color:var(--accent);
+  }
+
+  /* ---------- Product grid ---------- */
+  main{
+    flex:1;
+    padding:4px 18px 130px;
+  }
+  .section-title{
+    font-size:13px;
+    color:var(--muted);
+    margin:18px 2px 10px;
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+  }
+  .card{
+    background:var(--surface);
+    border-radius:var(--radius-md);
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    border:1px solid var(--line);
+  }
+  .card-art{
+    aspect-ratio:1.2/1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+  }
+  .card-art svg{width:52%;height:52%;}
+  .card-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:3px;flex:1;}
+  .card-name{font-family:"Fraunces",serif;font-weight:600;font-size:15px;line-height:1.2;}
+  .card-desc{font-size:11.5px;color:var(--muted);line-height:1.35;min-height:29px;}
+  .card-foot{
+    margin-top:6px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+  }
+  .price{font-weight:700;font-size:14.5px;font-variant-numeric:tabular-nums;}
+
+  .add-btn{
+    width:32px;height:32px;border-radius:10px;
+    border:none;background:var(--accent);color:var(--accent-ink);
+    font-size:18px;line-height:1;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .stepper{
+    display:flex;align-items:center;gap:8px;
+    background:var(--surface-alt);
+    border-radius:10px;
+    padding:3px;
+  }
+  .stepper button{
+    width:26px;height:26px;border-radius:8px;border:none;
+    background:var(--surface);color:var(--ink);
+    font-size:15px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .stepper span{
+    min-width:16px;text-align:center;font-weight:700;font-size:13.5px;
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* ---------- Cart bar ---------- */
+  .cartbar{
+    position:fixed;
+    left:0;right:0;
+    bottom:calc(16px + env(safe-area-inset-bottom,0px));
+    display:flex;
+    justify-content:center;
+    z-index:30;
+    pointer-events:none;
+  }
+  .cartbar-inner{
+    pointer-events:auto;
+    width:calc(100% - 36px);
+    max-width:444px;
+    background:var(--accent);
+    color:var(--accent-ink);
+    border-radius:16px;
+    padding:14px 18px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    box-shadow:0 14px 30px -12px rgba(0,0,0,.45);
+    cursor:pointer;
+    transform:translateY(120%);
+    transition:transform .28s cubic-bezier(.32,.72,0,1);
+  }
+  .cartbar-inner.show{transform:translateY(0);}
+  .cartbar-left{display:flex;align-items:center;gap:10px;}
+  .cartbar-count{
+    background:rgba(255,255,255,.22);
+    border-radius:8px;
+    min-width:24px;height:24px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:12.5px;font-weight:800;
+  }
+  .cartbar-label{font-weight:700;font-size:14.5px;}
+  .cartbar-total{font-weight:800;font-size:15px;font-variant-numeric:tabular-nums;}
+
+  /* ---------- Sheet (cart / checkout) ---------- */
+  .scrim{
+    position:fixed;inset:0;
+    background:rgba(20,16,10,.45);
+    z-index:40;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .22s;
+  }
+  .scrim.show{opacity:1;pointer-events:auto;}
+
+  .sheet{
+    position:fixed;
+    left:0;right:0;bottom:0;
+    z-index:41;
+    max-width:480px;
+    margin:0 auto;
+    background:var(--surface);
+    border-radius:22px 22px 0 0;
+    max-height:88vh;
+    display:flex;
+    flex-direction:column;
+    transform:translateY(100%);
+    transition:transform .3s cubic-bezier(.32,.72,0,1);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  .sheet.show{transform:translateY(0);}
+  .sheet-handle{
+    width:38px;height:4px;background:var(--line);
+    border-radius:4px;margin:10px auto 4px;flex-shrink:0;
+  }
+  .sheet-head{
+    padding:8px 20px 12px;
+    display:flex;align-items:center;justify-content:space-between;
+    flex-shrink:0;
+    border-bottom:1px solid var(--line);
+  }
+  .sheet-head h2{margin:0;font-size:19px;font-weight:600;}
+  .sheet-close{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:4px;}
+  .sheet-body{overflow-y:auto;padding:14px 20px 10px;}
+
+  .cart-row{
+    display:flex;align-items:center;gap:12px;
+    padding:11px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .cart-row:last-child{border-bottom:none;}
+  .cart-row-art{
+    width:52px;height:52px;border-radius:12px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .cart-row-art svg{width:55%;height:55%;}
+  .cart-row-info{flex:1;min-width:0;}
+  .cart-row-name{font-weight:600;font-size:14px;font-family:"Fraunces",serif;}
+  .cart-row-price{font-size:12.5px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums;}
+  .cart-remove{
+    background:none;border:none;color:var(--danger);
+    font-size:11.5px;font-weight:700;cursor:pointer;padding:0;margin-top:4px;
+  }
+
+  .empty-cart{
+    padding:36px 10px 20px;
+    text-align:center;
+    color:var(--muted);
+  }
+  .empty-cart svg{width:56px;height:56px;margin-bottom:10px;opacity:.55;}
+  .empty-cart p{margin:0;font-size:13.5px;}
+
+  .summary-row{
+    display:flex;justify-content:space-between;
+    font-size:14px;padding:6px 0;color:var(--muted);
+  }
+  .summary-row.total{
+    color:var(--ink);
+    font-weight:800;
+    font-size:17px;
+    padding-top:12px;
+    margin-top:4px;
+    border-top:1px solid var(--line);
+    font-variant-numeric:tabular-nums;
+  }
+
+  .sheet-foot{
+    flex-shrink:0;
+    padding:12px 20px calc(16px + env(safe-area-inset-bottom,0px));
+    border-top:1px solid var(--line);
+  }
+  .btn{
+    width:100%;
+    border:none;
+    border-radius:14px;
+    padding:15px;
+    font-size:15px;
+    font-weight:700;
+    font-family:"Manrope",sans-serif;
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .btn-primary{background:var(--accent);color:var(--accent-ink);}
+  .btn-primary:disabled{opacity:.45;}
+  .btn-ghost{background:var(--surface-alt);color:var(--ink);margin-top:8px;}
+
+  /* ---------- Checkout form ---------- */
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;font-size:12px;font-weight:700;color:var(--muted);
+    margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em;
+  }
+  .field input, .field textarea{
+    width:100%;
+    border:1px solid var(--line);
+    background:var(--surface-alt);
+    color:var(--ink);
+    border-radius:12px;
+    padding:12px 13px;
+    font-size:14.5px;
+    font-family:"Manrope",sans-serif;
+    resize:none;
+  }
+  .field input:focus, .field textarea:focus{
+    outline:2px solid var(--accent);
+    outline-offset:-1px;
+  }
+  .segmented{
+    display:flex;
+    background:var(--surface-alt);
+    border-radius:12px;
+    padding:3px;
+    gap:3px;
+  }
+  .segmented button{
+    flex:1;
+    border:none;background:transparent;
+    padding:10px 6px;
+    border-radius:9px;
+    font-size:13px;
+    font-weight:700;
+    color:var(--muted);
+    cursor:pointer;
+  }
+  .segmented button.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1);}
+
+  .toast{
+    position:fixed;
+    left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));
+    transform:translate(-50%,10px);
+    background:var(--ink);
+    color:var(--bg);
+    padding:12px 18px;
+    border-radius:12px;
+    font-size:13.5px;
+    font-weight:600;
+    z-index:60;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s, transform .2s;
+    text-align:center;
+    max-width:80%;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top" id="topHeader">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 11.5C4 8 7 6 12 6s8 2 8 5.5c0 4-2.5 6.5-8 6.5s-8-2.5-8-6.5Z" stroke="var(--accent-ink)" stroke-width="1.6"/><path d="M8 9.5c0-1.6 1.8-2.5 4-2.5s4 .9 4 2.5" stroke="var(--accent-ink)" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>Буханка</h1>
+        <p>Хлеб на закваске &amp; сдоба</p>
+      </div>
+    </div>
+    <button class="icon-btn" id="infoBtn" aria-label="О нас">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg>
+    </button>
+  </header>
+
+  <div class="chips" id="chips"></div>
+
+  <main id="main"></main>
+
+  <div class="cartbar">
+    <div class="cartbar-inner" id="cartBar">
+      <div class="cartbar-left">
+        <span class="cartbar-count" id="cartCount">0</span>
+        <span class="cartbar-label">Корзина</span>
+      </div>
+      <span class="cartbar-total" id="cartBarTotal">0 руб.</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Cart sheet -->
+<div class="scrim" id="scrimCart"></div>
+<div class="sheet" id="sheetCart">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h2>Ваш заказ</h2>
+    <button class="sheet-close" id="closeCart">&times;</button>
+  </div>
+  <div class="sheet-body" id="cartBody"></div>
+  <div class="sheet-foot" id="cartFoot">
+    <button class="btn btn-primary" id="toCheckout">Оформить заказ</button>
+  </div>
+</div>
+
+<!-- Checkout sheet -->
+<div class="scrim" id="scrimCheckout"></div>
+<div class="sheet" id="sheetCheckout">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h2>Оформление</h2>
+    <button class="sheet-close" id="closeCheckout">&times;</button>
+  </div>
+  <div class="sheet-body">
+    <div class="field">
+      <label>Способ получения</label>
+      <div class="segmented" id="deliverySeg">
+        <button type="button" class="active" data-val="pickup">Самовывоз</button>
+        <button type="button" data-val="delivery">Доставка</button>
+      </div>
+    </div>
+    <div class="field" id="addressField" hidden>
+      <label>Адрес доставки</label>
+      <input id="address" type="text" placeholder="Улица, дом, квартира">
+    </div>
+    <div class="field">
+      <label>Имя</label>
+      <input id="name" type="text" placeholder="Как к вам обращаться">
+    </div>
+    <div class="field">
+      <label>Телефон</label>
+      <input id="phone" type="tel" placeholder="+375 29 000-00-00">
+    </div>
+    <div class="field">
+      <label>Комментарий</label>
+      <textarea id="comment" rows="2" placeholder="Пожелания к заказу (необязательно)"></textarea>
+    </div>
+    <div class="summary-row"><span>Товары</span><span id="sumItems">0 руб.</span></div>
+    <div class="summary-row total"><span>Итого</span><span id="sumTotal">0 руб.</span></div>
+  </div>
+  <div class="sheet-foot">
+    <button class="btn btn-primary" id="submitOrder">Подтвердить заказ</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+  if (tg) { tg.ready(); tg.expand(); }
+
+  /* ---------------- Data ---------------- */
+  var ICONS = {
+    bread: '<svg viewBox="0 0 48 48" fill="none"><path d="M6 24c0-9 8-15 18-15s18 6 18 15c0 8-6 13-18 13S6 32 6 24Z" fill="var(--accent2)" opacity=".18"/><path d="M6 24c0-9 8-15 18-15s18 6 18 15c0 8-6 13-18 13S6 32 6 24Z" stroke="var(--accent2)" stroke-width="1.8"/><path d="M14 18c0-3.2 4-5 10-5s10 1.8 10 5" stroke="var(--accent2)" stroke-width="1.6" stroke-linecap="round"/><path d="M16 25c1.5 1.5 3 1.5 4.5 0M23.5 25c1.5 1.5 3 1.5 4.5 0M31 25c1.5 1.5 3 1.5 4.5 0" stroke="var(--accent2)" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    bun: '<svg viewBox="0 0 48 48" fill="none"><ellipse cx="24" cy="26" rx="16" ry="12" fill="var(--accent)" opacity=".18"/><ellipse cx="24" cy="26" rx="16" ry="12" stroke="var(--accent)" stroke-width="1.8"/><path d="M11 22c3-6 9-9 13-9s10 3 13 9" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/><path d="M18 26.5c1-1.2 2-1.2 3 0M27 26.5c1-1.2 2-1.2 3 0" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    cake: '<svg viewBox="0 0 48 48" fill="none"><path d="M9 24 L24 8 L39 24 Z" fill="var(--accent2)" opacity=".18"/><path d="M9 24 L24 8 L39 24 Z" stroke="var(--accent2)" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 24v11a3 3 0 0 0 3 3h18a3 3 0 0 0 3-3V24" stroke="var(--accent2)" stroke-width="1.8" stroke-linejoin="round"/><path d="M18 30c1.4-1.4 2.6-1.4 4 0s2.6 1.4 4 0 2.6-1.4 4 0" stroke="var(--accent2)" stroke-width="1.4" stroke-linecap="round"/></svg>'
+  };
+
+  var CATALOG = [
+    { cat:"Хлеб", label:"Хлеб на закваске", icon:"bread", items:[
+      {id:"rye", name:"Ржаной подовый", desc:"Классика на вечной закваске, 800 г", price:9.5},
+      {id:"wheat", name:"Пшеничный деревенский", desc:"Хрустящая корка, мягкий мякиш, 700 г", price:8.8},
+      {id:"grain", name:"Мультизлаковый", desc:"Семь видов семян и злаков, 750 г", price:11.0},
+      {id:"spelt", name:"Полбяной", desc:"На спельтовой муке, лёгкий и ароматный, 650 г", price:12.5}
+    ]},
+    { cat:"Сдоба", label:"Сдоба и выпечка", icon:"bun", items:[
+      {id:"croissant", name:"Круассан классический", desc:"Слоёный, на сливочном масле", price:4.2},
+      {id:"cinnamon", name:"Булочка с корицей", desc:"С карамельной глазурью", price:4.5},
+      {id:"bagel", name:"Бейгл с кунжутом", desc:"Плотный, слегка сладковатый", price:3.6},
+      {id:"cheese", name:"Ватрушка творожная", desc:"Домашний творог, ванильная нотка", price:5.0}
+    ]},
+    { cat:"Торты", label:"Торты и десерты", icon:"cake", items:[
+      {id:"honey", name:"Медовик", desc:"Кусок, 6 нежных коржей", price:7.5},
+      {id:"napoleon", name:"Наполеон", desc:"Кусок, заварной крем", price:7.5},
+      {id:"cheesecake", name:"Чизкейк Нью-Йорк", desc:"Кусок, классический рецепт", price:8.2},
+      {id:"carrot", name:"Морковный торт", desc:"Кусок, крем-чиз, грецкий орех", price:8.0}
+    ]}
+  ];
+
+  var cart = {}; // id -> qty
+  var byId = {};
+  CATALOG.forEach(function(sec){ sec.items.forEach(function(p){ p._icon = sec.icon; byId[p.id] = p; }); });
+
+  var currentCat = CATALOG[0].cat;
+
+  /* ---------------- Render catalog ---------------- */
+  var chipsEl = document.getElementById("chips");
+  var mainEl = document.getElementById("main");
+
+  function fmt(n){
+    return n.toFixed(2).replace(/\.00$/,"") + " руб.";
+  }
+
+  function renderChips(){
+    chipsEl.innerHTML = "";
+    CATALOG.forEach(function(sec){
+      var b = document.createElement("button");
+      b.className = "chip" + (sec.cat === currentCat ? " active" : "");
+      b.textContent = sec.cat;
+      b.onclick = function(){ currentCat = sec.cat; renderChips(); renderGrid(); };
+      chipsEl.appendChild(b);
+    });
+  }
+
+  function qtyOf(id){ return cart[id] || 0; }
+
+  function renderGrid(){
+    var sec = CATALOG.filter(function(s){ return s.cat === currentCat; })[0];
+    mainEl.innerHTML = "";
+    var title = document.createElement("div");
+    title.className = "section-title";
+    title.textContent = sec.label;
+    mainEl.appendChild(title);
+
+    var grid = document.createElement("div");
+    grid.className = "grid";
+    sec.items.forEach(function(p){
+      grid.appendChild(renderCard(p));
+    });
+    mainEl.appendChild(grid);
+  }
+
+  function renderCard(p){
+    var card = document.createElement("div");
+    card.className = "card";
+
+    var art = document.createElement("div");
+    art.className = "card-art";
+    art.style.background = "var(--surface-alt)";
+    art.innerHTML = ICONS[p._icon];
+    card.appendChild(art);
+
+    var body = document.createElement("div");
+    body.className = "card-body";
+    body.innerHTML =
+      '<div class="card-name">' + p.name + '</div>' +
+      '<div class="card-desc">' + p.desc + '</div>';
+
+    var foot = document.createElement("div");
+    foot.className = "card-foot";
+    var price = document.createElement("span");
+    price.className = "price";
+    price.textContent = fmt(p.price);
+    foot.appendChild(price);
+
+    var ctrl = document.createElement("div");
+    ctrl.id = "ctrl-" + p.id;
+    renderCtrl(ctrl, p);
+    foot.appendChild(ctrl);
+
+    body.appendChild(foot);
+    card.appendChild(body);
+    return card;
+  }
+
+  function renderCtrl(el, p){
+    var q = qtyOf(p.id);
+    if (q === 0){
+      el.innerHTML = "";
+      var btn = document.createElement("button");
+      btn.className = "add-btn";
+      btn.textContent = "+";
+      btn.setAttribute("aria-label","Добавить " + p.name);
+      btn.onclick = function(){ changeQty(p.id, 1); };
+      el.appendChild(btn);
+    } else {
+      el.innerHTML = "";
+      var wrap = document.createElement("div");
+      wrap.className = "stepper";
+      var minus = document.createElement("button");
+      minus.textContent = "−";
+      minus.onclick = function(){ changeQty(p.id, -1); };
+      var span = document.createElement("span");
+      span.textContent = q;
+      var plus = document.createElement("button");
+      plus.textContent = "+";
+      plus.onclick = function(){ changeQty(p.id, 1); };
+      wrap.appendChild(minus); wrap.appendChild(span); wrap.appendChild(plus);
+      el.appendChild(wrap);
+    }
+  }
+
+  function changeQty(id, delta){
+    var q = qtyOf(id) + delta;
+    if (q <= 0) delete cart[id]; else cart[id] = q;
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+    var ctrlEl = document.getElementById("ctrl-" + id);
+    if (ctrlEl) renderCtrl(ctrlEl, byId[id]);
+    updateCartBar();
+    if (document.getElementById("sheetCart").classList.contains("show")) renderCartBody();
+  }
+
+  function cartTotal(){
+    var t = 0;
+    Object.keys(cart).forEach(function(id){ t += byId[id].price * cart[id]; });
+    return t;
+  }
+  function cartCount(){
+    var c = 0;
+    Object.keys(cart).forEach(function(id){ c += cart[id]; });
+    return c;
+  }
+
+  function updateCartBar(){
+    var count = cartCount();
+    var bar = document.getElementById("cartBar");
+    document.getElementById("cartCount").textContent = count;
+    document.getElementById("cartBarTotal").textContent = fmt(cartTotal());
+    if (count > 0) bar.classList.add("show"); else bar.classList.remove("show");
+  }
+
+  /* ---------------- Cart sheet ---------------- */
+  var sheetCart = document.getElementById("sheetCart");
+  var scrimCart = document.getElementById("scrimCart");
+
+  function openCart(){
+    renderCartBody();
+    sheetCart.classList.add("show");
+    scrimCart.classList.add("show");
+  }
+  function closeCartFn(){
+    sheetCart.classList.remove("show");
+    scrimCart.classList.remove("show");
+  }
+
+  function renderCartBody(){
+    var body = document.getElementById("cartBody");
+    var foot = document.getElementById("cartFoot");
+    var ids = Object.keys(cart);
+    if (ids.length === 0){
+      body.innerHTML =
+        '<div class="empty-cart">' +
+        '<svg viewBox="0 0 48 48" fill="none"><path d="M9 24 L24 8 L39 24 Z" stroke="currentColor" stroke-width="1.6"/><path d="M12 24v11a3 3 0 0 0 3 3h18a3 3 0 0 0 3-3V24" stroke="currentColor" stroke-width="1.6"/></svg>' +
+        '<p>Пока пусто — выберите что-нибудь свежее</p></div>';
+      foot.innerHTML = '<button class="btn btn-ghost" id="backToShop">К покупкам</button>';
+      document.getElementById("backToShop").onclick = closeCartFn;
+      return;
+    }
+    body.innerHTML = "";
+    ids.forEach(function(id){
+      var p = byId[id];
+      var row = document.createElement("div");
+      row.className = "cart-row";
+      row.innerHTML =
+        '<div class="cart-row-art" style="background:var(--surface-alt)">' + ICONS[p._icon] + '</div>' +
+        '<div class="cart-row-info">' +
+          '<div class="cart-row-name">' + p.name + '</div>' +
+          '<div class="cart-row-price">' + fmt(p.price) + ' × ' + cart[id] + '</div>' +
+        '</div>';
+      var ctrl = document.createElement("div");
+      ctrl.id = "cctrl-" + id;
+      renderCtrl(ctrl, p);
+      row.appendChild(ctrl);
+      body.appendChild(row);
+    });
+    foot.innerHTML = '<button class="btn btn-primary" id="toCheckout2">Оформить заказ · ' + fmt(cartTotal()) + '</button>';
+    document.getElementById("toCheckout2").onclick = openCheckout;
+  }
+
+  // patch renderCtrl usage inside cart sheet to also refresh grid card if visible
+  var origChangeQty = changeQty;
+  changeQty = function(id, delta){
+    origChangeQty(id, delta);
+    var cctrl = document.getElementById("cctrl-" + id);
+    if (cctrl) { if (qtyOf(id) === 0){ renderCartBody(); } else { renderCtrl(cctrl, byId[id]); document.getElementById("cartFoot").innerHTML = '<button class="btn btn-primary" id="toCheckout2">Оформить заказ · ' + fmt(cartTotal()) + '</button>'; document.getElementById("toCheckout2").onclick = openCheckout; } }
+  };
+
+  document.getElementById("cartBar").onclick = openCart;
+  document.getElementById("closeCart").onclick = closeCartFn;
+  scrimCart.onclick = closeCartFn;
+  document.getElementById("toCheckout").onclick = openCheckout;
+
+  /* ---------------- Checkout sheet ---------------- */
+  var sheetCheckout = document.getElementById("sheetCheckout");
+  var scrimCheckout = document.getElementById("scrimCheckout");
+  var deliveryMode = "pickup";
+
+  function openCheckout(){
+    closeCartFn();
+    document.getElementById("sumItems").textContent = fmt(cartTotal());
+    document.getElementById("sumTotal").textContent = fmt(cartTotal());
+    sheetCheckout.classList.add("show");
+    scrimCheckout.classList.add("show");
+  }
+  function closeCheckoutFn(){
+    sheetCheckout.classList.remove("show");
+    scrimCheckout.classList.remove("show");
+  }
+  document.getElementById("closeCheckout").onclick = closeCheckoutFn;
+  scrimCheckout.onclick = closeCheckoutFn;
+
+  var segBtns = document.querySelectorAll("#deliverySeg button");
+  segBtns.forEach(function(b){
+    b.onclick = function(){
+      segBtns.forEach(function(x){ x.classList.remove("active"); });
+      b.classList.add("active");
+      deliveryMode = b.getAttribute("data-val");
+      document.getElementById("addressField").hidden = (deliveryMode !== "delivery");
+    };
+  });
+
+  function showToast(msg){
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(function(){ t.classList.remove("show"); }, 2600);
+  }
+
+  document.getElementById("submitOrder").onclick = function(){
+    var name = document.getElementById("name").value.trim();
+    var phone = document.getElementById("phone").value.trim();
+    var address = document.getElementById("address").value.trim();
+    var comment = document.getElementById("comment").value.trim();
+
+    if (cartCount() === 0){ showToast("Корзина пуста"); return; }
+    if (!name){ showToast("Укажите имя"); return; }
+    if (!phone){ showToast("Укажите телефон"); return; }
+    if (deliveryMode === "delivery" && !address){ showToast("Укажите адрес доставки"); return; }
+
+    var items = Object.keys(cart).map(function(id){
+      var p = byId[id];
+      return { id:id, name:p.name, price:p.price, qty:cart[id] };
+    });
+
+    var order = {
+      items: items,
+      total: cartTotal(),
+      delivery: deliveryMode,
+      address: deliveryMode === "delivery" ? address : null,
+      name: name,
+      phone: phone,
+      comment: comment || null
+    };
+
+    var btn = document.getElementById("submitOrder");
+    btn.disabled = true;
+    btn.textContent = "Отправляем…";
+
+    if (tg && tg.sendData){
+      tg.sendData(JSON.stringify(order));
+      setTimeout(function(){ if (tg.close) tg.close(); }, 250);
+    } else {
+      showToast("Откройте меню через кнопку в Telegram-боте, чтобы оформить заказ");
+      btn.disabled = false;
+      btn.textContent = "Подтвердить заказ";
+    }
+  };
+
+  /* ---------------- Header shadow on scroll ---------------- */
+  window.addEventListener("scroll", function(){
+    var h = document.getElementById("topHeader");
+    if (window.scrollY > 4) h.classList.add("scrolled"); else h.classList.remove("scrolled");
+  });
+
+  document.getElementById("infoBtn").onclick = function(){
+    showToast("Свежая выпечка каждый день · Минск");
+  };
+
+  if (tg && tg.setHeaderColor) { try{ tg.setHeaderColor("secondary_bg_color"); }catch(e){} }
+  if (tg && tg.setBackgroundColor) { try{ tg.setBackgroundColor("secondary_bg_color"); }catch(e){} }
+
+  renderChips();
+  renderGrid();
+  updateCartBar();
+})();
+</script>
+</body>
+</html>
