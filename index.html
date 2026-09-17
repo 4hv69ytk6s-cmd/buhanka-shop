@@ -519,6 +519,14 @@
   var tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
   if (tg) { tg.ready(); tg.expand(); }
 
+  // Адрес запущенного FastAPI-приложения (app/main.py), которое отдаёт
+  // актуальный каталог из bakery.db через /api/catalog. Пока проект не
+  // задеплоен на сервер с доменом — это localhost, и витрина сможет
+  // загрузить каталог только при открытии на том же компьютере, где
+  // запущен `uvicorn app.main:app`. После деплоя (см. deploy/README.md)
+  // замените на публичный https-адрес бэкенда.
+  var API_BASE_URL = "http://127.0.0.1:8000";
+
   /* ---------------- Data ---------------- */
   var ICONS = {
     bread: '<svg viewBox="0 0 48 48" fill="none"><path d="M6 24c0-9 8-15 18-15s18 6 18 15c0 8-6 13-18 13S6 32 6 24Z" fill="var(--accent2)" opacity=".18"/><path d="M6 24c0-9 8-15 18-15s18 6 18 15c0 8-6 13-18 13S6 32 6 24Z" stroke="var(--accent2)" stroke-width="1.8"/><path d="M14 18c0-3.2 4-5 10-5s10 1.8 10 5" stroke="var(--accent2)" stroke-width="1.6" stroke-linecap="round"/><path d="M16 25c1.5 1.5 3 1.5 4.5 0M23.5 25c1.5 1.5 3 1.5 4.5 0M31 25c1.5 1.5 3 1.5 4.5 0" stroke="var(--accent2)" stroke-width="1.4" stroke-linecap="round"/></svg>',
@@ -526,32 +534,16 @@
     cake: '<svg viewBox="0 0 48 48" fill="none"><path d="M9 24 L24 8 L39 24 Z" fill="var(--accent2)" opacity=".18"/><path d="M9 24 L24 8 L39 24 Z" stroke="var(--accent2)" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 24v11a3 3 0 0 0 3 3h18a3 3 0 0 0 3-3V24" stroke="var(--accent2)" stroke-width="1.8" stroke-linejoin="round"/><path d="M18 30c1.4-1.4 2.6-1.4 4 0s2.6 1.4 4 0 2.6-1.4 4 0" stroke="var(--accent2)" stroke-width="1.4" stroke-linecap="round"/></svg>'
   };
 
-  var CATALOG = [
-    { cat:"Хлеб", label:"Хлеб на закваске", icon:"bread", items:[
-      {id:"rye", name:"Ржаной подовый", desc:"Классика на вечной закваске, 800 г", price:9.5},
-      {id:"wheat", name:"Пшеничный деревенский", desc:"Хрустящая корка, мягкий мякиш, 700 г", price:8.8},
-      {id:"grain", name:"Мультизлаковый", desc:"Семь видов семян и злаков, 750 г", price:11.0},
-      {id:"spelt", name:"Полбяной", desc:"На спельтовой муке, лёгкий и ароматный, 650 г", price:12.5}
-    ]},
-    { cat:"Сдоба", label:"Сдоба и выпечка", icon:"bun", items:[
-      {id:"croissant", name:"Круассан классический", desc:"Слоёный, на сливочном масле", price:4.2},
-      {id:"cinnamon", name:"Булочка с корицей", desc:"С карамельной глазурью", price:4.5},
-      {id:"bagel", name:"Бейгл с кунжутом", desc:"Плотный, слегка сладковатый", price:3.6},
-      {id:"cheese", name:"Ватрушка творожная", desc:"Домашний творог, ванильная нотка", price:5.0}
-    ]},
-    { cat:"Торты", label:"Торты и десерты", icon:"cake", items:[
-      {id:"honey", name:"Медовик", desc:"Кусок, 6 нежных коржей", price:7.5},
-      {id:"napoleon", name:"Наполеон", desc:"Кусок, заварной крем", price:7.5},
-      {id:"cheesecake", name:"Чизкейк Нью-Йорк", desc:"Кусок, классический рецепт", price:8.2},
-      {id:"carrot", name:"Морковный торт", desc:"Кусок, крем-чиз, грецкий орех", price:8.0}
-    ]}
-  ];
-
+  var CATALOG = [];
   var cart = {}; // id -> qty
   var byId = {};
-  CATALOG.forEach(function(sec){ sec.items.forEach(function(p){ p._icon = sec.icon; byId[p.id] = p; }); });
+  var currentCat = null;
 
-  var currentCat = CATALOG[0].cat;
+  function indexCatalog(){
+    byId = {};
+    CATALOG.forEach(function(sec){ sec.items.forEach(function(p){ p._icon = sec.icon; byId[p.id] = p; }); });
+    currentCat = CATALOG.length ? CATALOG[0].cat : null;
+  }
 
   /* ---------------- Render catalog ---------------- */
   var chipsEl = document.getElementById("chips");
@@ -829,9 +821,23 @@
   if (tg && tg.setHeaderColor) { try{ tg.setHeaderColor("secondary_bg_color"); }catch(e){} }
   if (tg && tg.setBackgroundColor) { try{ tg.setBackgroundColor("secondary_bg_color"); }catch(e){} }
 
-  renderChips();
-  renderGrid();
-  updateCartBar();
+  mainEl.innerHTML = '<div class="empty-cart"><p>Загружаем меню…</p></div>';
+  fetch(API_BASE_URL + "/api/catalog")
+    .then(function(res){ if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+    .then(function(data){
+      CATALOG = data;
+      indexCatalog();
+      if (!CATALOG.length){
+        mainEl.innerHTML = '<div class="empty-cart"><p>Пока нет товаров с ценой — загляните позже</p></div>';
+        return;
+      }
+      renderChips();
+      renderGrid();
+      updateCartBar();
+    })
+    .catch(function(err){
+      mainEl.innerHTML = '<div class="empty-cart"><p>Не удалось загрузить меню. Попробуйте открыть ещё раз позже.</p></div>';
+    });
 })();
 </script>
 </body>
