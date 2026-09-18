@@ -196,7 +196,8 @@
     justify-content:space-between;
     gap:8px;
   }
-  .price{font-weight:700;font-size:14.5px;font-variant-numeric:tabular-nums;}
+  .price{font-weight:700;font-size:14.5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  .card-ctrl{flex-shrink:0;width:96px;display:flex;justify-content:flex-end;}
 
   .add-btn{
     width:32px;height:32px;border-radius:10px;
@@ -636,6 +637,7 @@
 
     var ctrl = document.createElement("div");
     ctrl.id = "ctrl-" + p.id;
+    ctrl.className = "card-ctrl";
     renderCtrl(ctrl, p);
     foot.appendChild(ctrl);
 
