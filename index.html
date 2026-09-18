@@ -1039,7 +1039,7 @@
       return;
     }
     body.innerHTML = '<div class="empty-cart"><p>Загружаем…</p></div>';
-    fetch(API_BASE_URL + "/api/my-orders?init_data=" + encodeURIComponent(tg.initData))
+    fetch(API_BASE_URL + "/api/my-orders?init_data=" + encodeURIComponent(tg.initData), { cache: "no-store" })
       .then(function(res){ if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
       .then(renderOrders)
       .catch(function(){
