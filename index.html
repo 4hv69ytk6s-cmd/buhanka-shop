@@ -575,8 +575,50 @@
 
   function indexCatalog(){
     byId = {};
-    CATALOG.forEach(function(sec){ sec.items.forEach(function(p){ p._icon = sec.icon; byId[p.id] = p; }); });
+    CATALOG.forEach(function(sec){ sec.items.forEach(function(p){ p._icon = sec.icon; p._stepG = parseUnitGrams(p.desc); byId[p.id] = p; }); });
     currentCat = CATALOG.length ? CATALOG[0].cat : null;
+  }
+
+  // Товары с весовой единицей ("100 г", "0.5 кг" и т.п.) продаются шагами этой
+  // единицы — показываем набранный вес, а не голое число шагов.
+  function parseUnitGrams(desc){
+    if (!desc) return null;
+    var s = desc.trim().toLowerCase().replace(",", ".");
+    var m = s.match(/^(\d+(?:\.\d+)?)\s*кг$/);
+    if (m) return parseFloat(m[1]) * 1000;
+    m = s.match(/^(\d+(?:\.\d+)?)\s*г$/);
+    if (m) return parseFloat(m[1]);
+    return null;
+  }
+
+  function formatUnitQty(p, q){
+    if (!p._stepG) return String(q);
+    var totalG = p._stepG * q;
+    if (totalG < 1000) return totalG + " г";
+    var kg = Math.round(totalG / 100) / 10;
+    return (kg % 1 === 0 ? kg : kg.toFixed(1).replace(".", ",")) + " кг";
+  }
+
+  // Зажатие +/- быстро повторяет шаг, чтобы для весового товара (например,
+  // набрать 1 кг орехов по 100 г) не нужно было нажимать кнопку десять раз.
+  function attachHold(btn, fn){
+    var timer = null, interval = null, longPress = false;
+    function stop(){ clearTimeout(timer); clearInterval(interval); timer = null; interval = null; }
+    btn.addEventListener("pointerdown", function(){
+      longPress = false;
+      timer = setTimeout(function(){
+        longPress = true;
+        fn();
+        interval = setInterval(fn, 110);
+      }, 420);
+    });
+    ["pointerup","pointerleave","pointercancel"].forEach(function(evt){
+      btn.addEventListener(evt, stop);
+    });
+    btn.addEventListener("click", function(e){
+      if (longPress){ e.preventDefault(); longPress = false; return; }
+      fn();
+    });
   }
 
   /* ---------------- Render catalog ---------------- */
@@ -665,25 +707,57 @@
       wrap.className = "stepper";
       var minus = document.createElement("button");
       minus.textContent = "−";
-      minus.onclick = function(){ changeQty(p.id, -1); };
+      attachHold(minus, function(){ changeQty(p.id, -1); });
       var span = document.createElement("span");
-      span.textContent = q;
+      span.setAttribute("data-qty-span", p.id);
+      span.textContent = formatUnitQty(p, q);
       var plus = document.createElement("button");
       plus.textContent = "+";
-      plus.onclick = function(){ changeQty(p.id, 1); };
+      attachHold(plus, function(){ changeQty(p.id, 1); });
       wrap.appendChild(minus); wrap.appendChild(span); wrap.appendChild(plus);
       el.appendChild(wrap);
     }
   }
 
   function changeQty(id, delta){
+    var wasZero = qtyOf(id) === 0;
     var q = qtyOf(id) + delta;
-    if (q <= 0) delete cart[id]; else cart[id] = q;
+    var nowZero = q <= 0;
+    if (nowZero) delete cart[id]; else cart[id] = q;
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
-    var ctrlEl = document.getElementById("ctrl-" + id);
-    if (ctrlEl) renderCtrl(ctrlEl, byId[id]);
+
+    if (wasZero !== nowZero){
+      // переход "нет в корзине" <-> "есть" — меняется сама разметка (кнопка
+      // "Добавить" на степпер и обратно), нужна полная пересборка
+      var ctrlEl = document.getElementById("ctrl-" + id);
+      if (ctrlEl) renderCtrl(ctrlEl, byId[id]);
+      var cctrl = document.getElementById("cctrl-" + id);
+      if (cctrl) renderCtrl(cctrl, byId[id]);
+    } else {
+      // количество меняется в пределах степпера — обновляем только текст,
+      // не трогая сами кнопки (важно для непрерывного зажатия +/-)
+      document.querySelectorAll('[data-qty-span="' + id + '"]').forEach(function(span){
+        span.textContent = formatUnitQty(byId[id], q);
+      });
+    }
+    updateCartRowPrice(id);
     updateCartBar();
-    if (document.getElementById("sheetCart").classList.contains("show")) renderCartBody();
+    if (document.getElementById("sheetCart").classList.contains("show")){
+      if (wasZero !== nowZero) renderCartBody();
+      else updateCartFootTotal();
+    }
+  }
+
+  function updateCartRowPrice(id){
+    var el = document.querySelector('[data-qty-price="' + id + '"]');
+    if (!el || !cart[id]) return;
+    var p = byId[id];
+    el.textContent = fmt(p.price) + " × " + formatUnitQty(p, cart[id]);
+  }
+
+  function updateCartFootTotal(){
+    var btn = document.getElementById("toCheckout2");
+    if (btn) btn.textContent = "Оформить заказ · " + fmt(cartTotal());
   }
 
   function cartTotal(){
@@ -741,7 +815,7 @@
         '<div class="cart-row-art" style="background:var(--surface-alt)">' + ICONS[p._icon] + '</div>' +
         '<div class="cart-row-info">' +
           '<div class="cart-row-name">' + p.name + '</div>' +
-          '<div class="cart-row-price">' + fmt(p.price) + ' × ' + cart[id] + '</div>' +
+          '<div class="cart-row-price" data-qty-price="' + id + '">' + fmt(p.price) + ' × ' + formatUnitQty(p, cart[id]) + '</div>' +
         '</div>';
       var ctrl = document.createElement("div");
       ctrl.id = "cctrl-" + id;
@@ -752,14 +826,6 @@
     foot.innerHTML = '<button class="btn btn-primary" id="toCheckout2">Оформить заказ · ' + fmt(cartTotal()) + '</button>';
     document.getElementById("toCheckout2").onclick = openCheckout;
   }
-
-  // patch renderCtrl usage inside cart sheet to also refresh grid card if visible
-  var origChangeQty = changeQty;
-  changeQty = function(id, delta){
-    origChangeQty(id, delta);
-    var cctrl = document.getElementById("cctrl-" + id);
-    if (cctrl) { if (qtyOf(id) === 0){ renderCartBody(); } else { renderCtrl(cctrl, byId[id]); document.getElementById("cartFoot").innerHTML = '<button class="btn btn-primary" id="toCheckout2">Оформить заказ · ' + fmt(cartTotal()) + '</button>'; document.getElementById("toCheckout2").onclick = openCheckout; } }
-  };
 
   document.getElementById("cartBar").onclick = openCart;
   document.getElementById("closeCart").onclick = closeCartFn;
