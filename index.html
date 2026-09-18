@@ -23,8 +23,9 @@
     --radius-lg:22px;
     --radius-md:16px;
     --radius-sm:11px;
+    --tg-safe-bottom:0px;
     padding-top:env(safe-area-inset-top,0px);
-    padding-bottom:env(safe-area-inset-bottom,0px);
+    padding-bottom:max(env(safe-area-inset-bottom,0px), var(--tg-safe-bottom));
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -226,7 +227,7 @@
   .cartbar{
     position:fixed;
     left:0;right:0;
-    bottom:calc(16px + env(safe-area-inset-bottom,0px));
+    bottom:calc(34px + max(env(safe-area-inset-bottom,0px), var(--tg-safe-bottom)));
     display:flex;
     justify-content:center;
     z-index:30;
@@ -284,7 +285,7 @@
     flex-direction:column;
     transform:translateY(100%);
     transition:transform .3s cubic-bezier(.32,.72,0,1);
-    padding-bottom:env(safe-area-inset-bottom,0px);
+    padding-bottom:max(env(safe-area-inset-bottom,0px), var(--tg-safe-bottom));
   }
   .sheet.show{transform:translateY(0);}
   .sheet-handle{
@@ -344,7 +345,7 @@
 
   .sheet-foot{
     flex-shrink:0;
-    padding:12px 20px calc(16px + env(safe-area-inset-bottom,0px));
+    padding:12px 20px calc(16px + max(env(safe-area-inset-bottom,0px), var(--tg-safe-bottom)));
     border-top:1px solid var(--line);
   }
   .btn{
@@ -404,7 +405,7 @@
 
   .toast{
     position:fixed;
-    left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));
+    left:50%;bottom:calc(24px + max(env(safe-area-inset-bottom,0px), var(--tg-safe-bottom)));
     transform:translate(-50%,10px);
     background:var(--ink);
     color:var(--bg);
@@ -517,7 +518,29 @@
   "use strict";
 
   var tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
-  if (tg) { tg.ready(); tg.expand(); }
+  if (tg) {
+    tg.ready(); tg.expand();
+    // env(safe-area-inset-bottom) в WebView Telegram часто равен 0, даже когда
+    // сам Telegram занимает нижнюю зону (домашний индикатор) своим интерфейсом —
+    // из-за этого элементы с fixed-позиционированием "снизу" обрезаются его
+    // чром. Берём реальный отступ из Telegram WebApp API.
+    var updateSafeBottom = function(){
+      var bottom = 0;
+      if (tg.contentSafeAreaInset && typeof tg.contentSafeAreaInset.bottom === "number") {
+        bottom = Math.max(bottom, tg.contentSafeAreaInset.bottom);
+      }
+      if (tg.safeAreaInset && typeof tg.safeAreaInset.bottom === "number") {
+        bottom = Math.max(bottom, tg.safeAreaInset.bottom);
+      }
+      document.documentElement.style.setProperty("--tg-safe-bottom", bottom + "px");
+    };
+    updateSafeBottom();
+    if (tg.onEvent) {
+      tg.onEvent("safeAreaChanged", updateSafeBottom);
+      tg.onEvent("contentSafeAreaChanged", updateSafeBottom);
+      tg.onEvent("viewportChanged", updateSafeBottom);
+    }
+  }
 
   // Адрес запущенного FastAPI-приложения (app/main.py), которое отдаёт
   // актуальный каталог из bakery.db через /api/catalog. Нельзя указывать
