@@ -552,6 +552,36 @@
     }
   }
 
+  /* ---------------- Данные клиента (имя/телефон/адрес) ---------------- */
+  // Сохраняем через Telegram CloudStorage (привязано к аккаунту, доступно с
+  // любого устройства, без бэкенда). Если открыто не из Telegram (или API
+  // недоступен) — используем localStorage как запасной вариант.
+  var CUSTOMER_INFO_KEY = "buhanka_customer_info";
+  var hasCloudStorage = !!(tg && tg.CloudStorage);
+
+  function saveCustomerInfo(info){
+    var json = JSON.stringify(info);
+    if (hasCloudStorage){
+      tg.CloudStorage.setItem(CUSTOMER_INFO_KEY, json);
+    } else {
+      try { localStorage.setItem(CUSTOMER_INFO_KEY, json); } catch(e){}
+    }
+  }
+
+  function loadCustomerInfo(callback){
+    if (hasCloudStorage){
+      tg.CloudStorage.getItem(CUSTOMER_INFO_KEY, function(err, value){
+        if (err || !value) { callback(null); return; }
+        try { callback(JSON.parse(value)); } catch(e){ callback(null); }
+      });
+    } else {
+      var value = null;
+      try { value = localStorage.getItem(CUSTOMER_INFO_KEY); } catch(e){}
+      if (!value) { callback(null); return; }
+      try { callback(JSON.parse(value)); } catch(e){ callback(null); }
+    }
+  }
+
   // Адрес запущенного FastAPI-приложения (app/main.py), которое отдаёт
   // актуальный каталог из bakery.db через /api/catalog. Нельзя указывать
   // http://127.0.0.1:8000 — витрина открывается в Telegram на устройстве
@@ -843,6 +873,18 @@
     document.getElementById("sumTotal").textContent = fmt(cartTotal());
     sheetCheckout.classList.add("show");
     scrimCheckout.classList.add("show");
+
+    var nameInput = document.getElementById("name");
+    var phoneInput = document.getElementById("phone");
+    var addressInput = document.getElementById("address");
+    if (!nameInput.value && !phoneInput.value && !addressInput.value){
+      loadCustomerInfo(function(info){
+        if (!info) return;
+        if (info.name) nameInput.value = info.name;
+        if (info.phone) phoneInput.value = info.phone;
+        if (info.address) addressInput.value = info.address;
+      });
+    }
   }
   function closeCheckoutFn(){
     sheetCheckout.classList.remove("show");
@@ -899,6 +941,7 @@
     btn.textContent = "Отправляем…";
 
     if (tg && tg.sendData){
+      saveCustomerInfo({ name: name, phone: phone, address: address });
       tg.sendData(JSON.stringify(order));
       setTimeout(function(){ if (tg.close) tg.close(); }, 250);
     } else {
