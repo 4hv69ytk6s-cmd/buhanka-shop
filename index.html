@@ -199,12 +199,12 @@
   .price{font-weight:700;font-size:14.5px;font-variant-numeric:tabular-nums;white-space:nowrap;}
 
   .add-btn{
-    width:32px;height:32px;border-radius:10px;
+    width:90%;align-self:center;
+    height:34px;border-radius:10px;
     border:none;background:var(--accent);color:var(--accent-ink);
-    font-size:18px;line-height:1;
+    font-size:13.5px;font-weight:600;line-height:1;
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;
-    flex-shrink:0;
   }
   .stepper{
     display:flex;align-items:center;gap:8px;
@@ -650,7 +650,7 @@
       el.innerHTML = "";
       var btn = document.createElement("button");
       btn.className = "add-btn";
-      btn.textContent = "+";
+      btn.textContent = "Добавить";
       btn.setAttribute("aria-label","Добавить " + p.name);
       btn.onclick = function(){ changeQty(p.id, 1); };
       el.appendChild(btn);
