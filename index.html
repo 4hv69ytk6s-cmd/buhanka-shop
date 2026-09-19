@@ -360,6 +360,12 @@
   }
   .order-total{font-weight:800;font-size:14.5px;color:var(--ink);font-variant-numeric:tabular-nums;}
 
+  /* ---------- About sheet ---------- */
+  .about-section{padding:14px 0;border-bottom:1px solid var(--line);}
+  .about-section:last-child{border-bottom:none;}
+  .about-section h3{margin:0 0 6px;font-size:14px;font-weight:600;}
+  .about-section p{margin:0;font-size:13.5px;line-height:1.5;color:var(--muted);white-space:pre-line;}
+
   .summary-row{
     display:flex;justify-content:space-between;
     font-size:14px;padding:6px 0;color:var(--muted);
@@ -487,7 +493,7 @@
         <span class="cartbar-count" id="cartCount">0</span>
         <span class="cartbar-label">Корзина</span>
       </div>
-      <span class="cartbar-total" id="cartBarTotal">0 руб.</span>
+      <span class="cartbar-total" id="cartBarTotal">0 BYN</span>
     </div>
   </div>
 
@@ -539,8 +545,8 @@
       <label>Комментарий</label>
       <textarea id="comment" rows="2" placeholder="Пожелания к заказу (необязательно)"></textarea>
     </div>
-    <div class="summary-row"><span>Товары</span><span id="sumItems">0 руб.</span></div>
-    <div class="summary-row total"><span>Итого</span><span id="sumTotal">0 руб.</span></div>
+    <div class="summary-row"><span>Товары</span><span id="sumItems">0 BYN</span></div>
+    <div class="summary-row total"><span>Итого</span><span id="sumTotal">0 BYN</span></div>
   </div>
   <div class="sheet-foot">
     <button class="btn btn-primary" id="submitOrder">Подтвердить заказ</button>
@@ -556,6 +562,17 @@
     <button class="sheet-close" id="closeOrders">&times;</button>
   </div>
   <div class="sheet-body" id="ordersBody"></div>
+</div>
+
+<!-- About sheet -->
+<div class="scrim" id="scrimAbout"></div>
+<div class="sheet" id="sheetAbout">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h2>О нас</h2>
+    <button class="sheet-close" id="closeAbout">&times;</button>
+  </div>
+  <div class="sheet-body" id="aboutBody"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -626,7 +643,7 @@
   // не значит. Сейчас здесь временный HTTPS-туннель (cloudflared) на локальный
   // uvicorn — для тестирования; после деплоя (см. deploy/README.md) замените
   // на постоянный публичный https-адрес бэкенда.
-  var API_BASE_URL = "https://compatible-prize-defeat-browse.trycloudflare.com";
+  var API_BASE_URL = "https://undertaken-beam-field-prompt.trycloudflare.com";
 
   /* ---------------- Data ---------------- */
   var ICONS = {
@@ -693,7 +710,7 @@
   var mainEl = document.getElementById("main");
 
   function fmt(n){
-    return n.toFixed(2).replace(/\.00$/,"") + " руб.";
+    return n.toFixed(2).replace(/\.00$/,"") + " BYN";
   }
 
   function renderChips(){
@@ -1060,15 +1077,64 @@
   document.getElementById("closeOrders").onclick = closeOrdersFn;
   scrimOrders.onclick = closeOrdersFn;
 
+  /* ---------------- About sheet ---------------- */
+  var sheetAbout = document.getElementById("sheetAbout");
+  var scrimAbout = document.getElementById("scrimAbout");
+
+  var ABOUT_SECTIONS = [
+    { key: "hours", title: "Часы работы" },
+    { key: "pickup", title: "Самовывоз" },
+    { key: "delivery", title: "Доставка" },
+    { key: "payment", title: "Оплата" }
+  ];
+
+  function renderAbout(info){
+    var body = document.getElementById("aboutBody");
+    body.innerHTML = "";
+    ABOUT_SECTIONS.forEach(function(sec){
+      var text = (info[sec.key] || "").trim();
+      if (!text || text.indexOf("ЗАПОЛНИТЬ") === 0) return;
+      var row = document.createElement("div");
+      row.className = "about-section";
+      row.innerHTML = '<h3>' + sec.title + '</h3><p></p>';
+      row.querySelector("p").textContent = text;
+      body.appendChild(row);
+    });
+    if (!body.children.length){
+      body.innerHTML = '<div class="empty-cart"><p>Информация появится здесь позже</p></div>';
+    }
+  }
+
+  function loadAbout(){
+    var body = document.getElementById("aboutBody");
+    body.innerHTML = '<div class="empty-cart"><p>Загружаем…</p></div>';
+    fetch(API_BASE_URL + "/api/about")
+      .then(function(res){ if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+      .then(renderAbout)
+      .catch(function(){
+        body.innerHTML = '<div class="empty-cart"><p>Не удалось загрузить информацию. Попробуйте ещё раз позже.</p></div>';
+      });
+  }
+
+  function openAbout(){
+    sheetAbout.classList.add("show");
+    scrimAbout.classList.add("show");
+    loadAbout();
+  }
+  function closeAboutFn(){
+    sheetAbout.classList.remove("show");
+    scrimAbout.classList.remove("show");
+  }
+  document.getElementById("closeAbout").onclick = closeAboutFn;
+  scrimAbout.onclick = closeAboutFn;
+
   /* ---------------- Header shadow on scroll ---------------- */
   window.addEventListener("scroll", function(){
     var h = document.getElementById("topHeader");
     if (window.scrollY > 4) h.classList.add("scrolled"); else h.classList.remove("scrolled");
   });
 
-  document.getElementById("infoBtn").onclick = function(){
-    showToast("Свежая выпечка каждый день · Минск");
-  };
+  document.getElementById("infoBtn").onclick = openAbout;
 
   if (tg && tg.setHeaderColor) { try{ tg.setHeaderColor("secondary_bg_color"); }catch(e){} }
   if (tg && tg.setBackgroundColor) { try{ tg.setBackgroundColor("secondary_bg_color"); }catch(e){} }
