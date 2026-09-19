@@ -994,14 +994,38 @@
     btn.disabled = true;
     btn.textContent = "Отправляем…";
 
-    if (tg && tg.sendData){
+    function resetBtn(){
+      btn.disabled = false;
+      btn.textContent = "Подтвердить заказ";
+    }
+
+    if (tg && tg.initData){
+      // Основной путь: заказ уходит на сервер с подписанным initData, поэтому
+      // работает при любом способе открытия мини-аппа (клавиатура, inline, меню).
+      order.init_data = tg.initData;
+      fetch(API_BASE_URL + "/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(order)
+      })
+        .then(function(res){ if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+        .then(function(){
+          saveCustomerInfo({ name: name, phone: phone, address: address });
+          if (tg.close) tg.close();
+        })
+        .catch(function(){
+          showToast("Не удалось отправить заказ. Попробуйте ещё раз");
+          resetBtn();
+        });
+    } else if (tg && tg.sendData){
+      // Запасной путь: initData пуст (кнопка обычной клавиатуры на Desktop) —
+      // заказ передаётся боту через sendData.
       saveCustomerInfo({ name: name, phone: phone, address: address });
       tg.sendData(JSON.stringify(order));
       setTimeout(function(){ if (tg.close) tg.close(); }, 250);
     } else {
       showToast("Откройте меню через кнопку в Telegram-боте, чтобы оформить заказ");
-      btn.disabled = false;
-      btn.textContent = "Подтвердить заказ";
+      resetBtn();
     }
   };
 
@@ -1052,7 +1076,7 @@
   function loadOrders(){
     var body = document.getElementById("ordersBody");
     if (!tg || !tg.initData){
-      body.innerHTML = '<div class="empty-cart"><p>История заказов доступна только при открытии из Telegram</p></div>';
+      body.innerHTML = '<div class="empty-cart"><p>История заказов доступна при открытии по кнопке «📦 Мои заказы» в чате с ботом (команда /orders)</p></div>';
       return;
     }
     body.innerHTML = '<div class="empty-cart"><p>Загружаем…</p></div>';
@@ -1076,6 +1100,7 @@
   document.getElementById("ordersBtn").onclick = openOrders;
   document.getElementById("closeOrders").onclick = closeOrdersFn;
   scrimOrders.onclick = closeOrdersFn;
+  if (/[?&]orders=1(&|$)/.test(location.search)) openOrders();
 
   /* ---------------- About sheet ---------------- */
   var sheetAbout = document.getElementById("sheetAbout");
