@@ -644,6 +644,7 @@
   // uvicorn — для тестирования; после деплоя (см. deploy/README.md) замените
   // на постоянный публичный https-адрес бэкенда.
   var API_BASE_URL = "https://srv2062571.hstgr.cloud";
+  var MAX_QTY = 100; // то же ограничение проверяет сервер (MAX_ITEM_QTY)
 
   /* ---------------- Data ---------------- */
   var ICONS = {
@@ -806,6 +807,10 @@
   function changeQty(id, delta){
     var wasZero = qtyOf(id) === 0;
     var q = qtyOf(id) + delta;
+    if (q > MAX_QTY){
+      showToast("Не больше " + MAX_QTY + " шт. одного товара — для крупного заказа напишите нам");
+      return;
+    }
     var nowZero = q <= 0;
     if (nowZero) delete cart[id]; else cart[id] = q;
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
@@ -1008,13 +1013,19 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(order)
       })
-        .then(function(res){ if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+        .then(function(res){
+          if (res.ok) return res.json();
+          // 400/429 — сервер объясняет причину (лимит количества, слишком много заказов)
+          return res.json().catch(function(){ return {}; }).then(function(body){
+            throw { serverMessage: typeof body.detail === "string" ? body.detail : "" };
+          });
+        })
         .then(function(){
           saveCustomerInfo({ name: name, phone: phone, address: address });
           if (tg.close) tg.close();
         })
-        .catch(function(){
-          showToast("Не удалось отправить заказ. Попробуйте ещё раз");
+        .catch(function(err){
+          showToast((err && err.serverMessage) || "Не удалось отправить заказ. Попробуйте ещё раз");
           resetBtn();
         });
     } else if (tg && tg.sendData){
