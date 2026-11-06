@@ -645,6 +645,7 @@
   // на постоянный публичный https-адрес бэкенда.
   var API_BASE_URL = "https://srv2062571.hstgr.cloud";
   var MAX_QTY = 99; // то же ограничение проверяет сервер (MAX_ITEM_QTY)
+  var MAX_GRAMS = 9980; // для весовых товаров — сервер (MAX_ITEM_GRAMS)
 
   /* ---------------- Data ---------------- */
   var ICONS = {
@@ -807,8 +808,9 @@
   function changeQty(id, delta){
     var wasZero = qtyOf(id) === 0;
     var q = qtyOf(id) + delta;
-    if (q > MAX_QTY){
-      showToast("Не больше " + MAX_QTY + " шт. одного товара — для крупного заказа напишите нам");
+    var stepG = byId[id] && byId[id]._stepG;
+    if (stepG ? q * stepG > MAX_GRAMS : q > MAX_QTY){
+      showToast("Не больше " + (stepG ? MAX_GRAMS + " г" : MAX_QTY + " шт.") + " одного товара — для крупного заказа напишите нам");
       return;
     }
     var nowZero = q <= 0;
