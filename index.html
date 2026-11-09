@@ -1042,7 +1042,7 @@
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19, attribution: "© OpenStreetMap"
     }).addTo(deliveryMap);
-    deliveryMap.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
+    deliveryMap.attributionControl.setPrefix(false);
     if (last) setDeliveryPoint(last.lat, last.lon);
     deliveryMap.on("click", function(e){ setDeliveryPoint(e.latlng.lat, e.latlng.lng); });
   }
