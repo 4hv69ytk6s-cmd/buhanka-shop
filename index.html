@@ -458,7 +458,14 @@
     max-width:80%;
   }
   .toast.show{opacity:1;transform:translate(-50%,0);}
+  /* Точка доставки на карте (Leaflet) */
+  .map-hint{font-size:12.5px;color:var(--muted);margin:10px 0 6px;line-height:1.35;}
+  #deliveryMap{height:220px;border-radius:var(--radius-sm);border:1px solid var(--line);overflow:hidden;position:relative;z-index:0;}
+  .map-fallback{font-size:13px;color:var(--muted);padding:12px;border:1px dashed var(--line);border-radius:var(--radius-sm);}
+  .map-locate{margin-top:6px;background:none;border:1px solid var(--line);color:inherit;border-radius:var(--radius-sm);padding:7px 12px;font:inherit;font-size:13px;}
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
 <body>
 <div class="app">
@@ -532,6 +539,11 @@
     <div class="field" id="addressField" hidden>
       <label>Адрес доставки</label>
       <input id="address" type="text" placeholder="Улица, дом, квартира">
+      <p class="map-hint" id="mapHint">Отметьте дом на карте — так курьер найдёт быстрее. Подъезд и квартиру напишите в адресе</p>
+      <div id="deliveryMap"></div>
+      <div class="map-fallback" id="mapFallback" hidden>Карта не открылась — можно оформить без точки, Ольга поставит её сама</div>
+      <button type="button" class="map-locate" id="mapLocate">📍 Где я</button>
+      <p class="map-hint" id="deliveryHours" hidden></p>
     </div>
     <div class="field">
       <label>Имя</label>
@@ -634,6 +646,20 @@
       if (!value) { callback(null); return; }
       try { callback(JSON.parse(value)); } catch(e){ callback(null); }
     }
+  }
+
+  // Последняя точка доставки на карте — только на этом устройстве (localStorage).
+  var LAST_POINT_KEY = "buhanka_last_point";
+  function saveLastPoint(point){
+    if (!point) return;
+    try { localStorage.setItem(LAST_POINT_KEY, JSON.stringify(point)); } catch(e){}
+  }
+  function loadLastPoint(){
+    try {
+      var p = JSON.parse(localStorage.getItem(LAST_POINT_KEY) || "null");
+      if (p && typeof p.lat === "number" && typeof p.lon === "number") return p;
+    } catch(e){}
+    return null;
   }
 
   // Адрес запущенного FastAPI-приложения (app/main.py), которое отдаёт
@@ -946,6 +972,7 @@
         if (info.address) addressInput.value = info.address;
       });
     }
+    if (deliveryMode === "delivery") showDeliveryMap();
   }
   function closeCheckoutFn(){
     sheetCheckout.classList.remove("show");
@@ -961,8 +988,93 @@
       b.classList.add("active");
       deliveryMode = b.getAttribute("data-val");
       document.getElementById("addressField").hidden = (deliveryMode !== "delivery");
+      if (deliveryMode === "delivery") showDeliveryMap();
+      if (deliveryMode === "delivery") loadDeliveryHours();
     };
   });
+
+  // Часы доставки под картой — из /api/about, загружаются один раз; не пришли — не показываем.
+  var deliveryHoursLoaded = false;
+  function loadDeliveryHours(){
+    if (deliveryHoursLoaded) return;
+    deliveryHoursLoaded = true;
+    fetch(API_BASE_URL + "/api/about")
+      .then(function(res){ if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+      .then(function(info){
+        var text = (info && info.delivery_hours || "").trim();
+        if (!text) return;
+        var el = document.getElementById("deliveryHours");
+        el.textContent = text;
+        el.hidden = false;
+      })
+      .catch(function(){});
+  }
+
+  /* ---------------- Точка доставки на карте ---------------- */
+  // Leaflet грузится async; карта создаётся при первом показе блока «Доставка».
+  // Нет window.L через 8 с после открытия витрины — заказ уходит с no_point.
+  var PAGE_STARTED = Date.now();
+  var MAP_WAIT_MS = 8000;
+  var DEFAULT_POINT = { lat: 53.95498, lon: 27.77798 }; // Колодищи
+  var deliveryMap = null, deliveryMarker = null, deliveryPoint = null, mapFailed = false, mapWaiting = false;
+
+  function round6(x){ return Number(x.toFixed(6)); }
+
+  function setDeliveryPoint(lat, lon){
+    deliveryPoint = { lat: round6(lat), lon: round6(lon) };
+    if (!deliveryMap) return;
+    if (deliveryMarker) deliveryMarker.setLatLng([lat, lon]);
+    else deliveryMarker = L.marker([lat, lon]).addTo(deliveryMap);
+  }
+
+  function mapUnavailable(){
+    mapFailed = true;
+    document.getElementById("deliveryMap").hidden = true;
+    document.getElementById("mapHint").hidden = true;
+    document.getElementById("mapLocate").hidden = true;
+    document.getElementById("mapFallback").hidden = false;
+  }
+
+  function createDeliveryMap(){
+    var last = loadLastPoint();
+    var start = last || DEFAULT_POINT;
+    deliveryMap = L.map("deliveryMap").setView([start.lat, start.lon], last ? 16 : 14);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "© OpenStreetMap"
+    }).addTo(deliveryMap);
+    if (last) setDeliveryPoint(last.lat, last.lon);
+    deliveryMap.on("click", function(e){ setDeliveryPoint(e.latlng.lat, e.latlng.lng); });
+  }
+
+  function showDeliveryMap(){
+    if (mapFailed) return;
+    if (deliveryMap){
+      setTimeout(function(){ deliveryMap.invalidateSize(); }, 0);
+      return;
+    }
+    if (!window.L){
+      if (Date.now() - PAGE_STARTED >= MAP_WAIT_MS){ mapUnavailable(); return; }
+      if (!mapWaiting){
+        mapWaiting = true;
+        setTimeout(function(){ mapWaiting = false; showDeliveryMap(); }, 200);
+      }
+      return;
+    }
+    try { createDeliveryMap(); } catch(e){ mapUnavailable(); return; }
+    // Блок только что стал видимым — без invalidateSize плитки остаются серыми.
+    setTimeout(function(){ deliveryMap.invalidateSize(); }, 0);
+  }
+
+  document.getElementById("mapLocate").onclick = function(){
+    if (!deliveryMap){ showToast("Карта ещё загружается"); return; }
+    if (!navigator.geolocation){ showToast("Не удалось определить место — поставьте точку на карте"); return; }
+    navigator.geolocation.getCurrentPosition(function(pos){
+      setDeliveryPoint(pos.coords.latitude, pos.coords.longitude);
+      deliveryMap.setView([pos.coords.latitude, pos.coords.longitude], 17);
+    }, function(){
+      showToast("Не удалось определить место — поставьте точку на карте");
+    }, { enableHighAccuracy: true, timeout: 10000 });
+  };
 
   function showToast(msg){
     var t = document.getElementById("toast");
@@ -981,6 +1093,13 @@
     if (!name){ showToast("Укажите имя"); return; }
     if (!phone){ showToast("Укажите телефон"); return; }
     if (deliveryMode === "delivery" && !address){ showToast("Укажите адрес доставки"); return; }
+    var isDelivery = deliveryMode === "delivery";
+    if (isDelivery && !deliveryPoint && !mapFailed){
+      // Карта ещё грузится, а 8 с уже прошло — значит, не откроется.
+      if (!window.L && Date.now() - PAGE_STARTED >= MAP_WAIT_MS) mapUnavailable();
+      else { showToast("Поставьте точку на карте"); return; }
+    }
+    var point = isDelivery && !mapFailed ? deliveryPoint : null;
 
     var items = Object.keys(cart).map(function(id){
       var p = byId[id];
@@ -992,6 +1111,9 @@
       total: cartTotal(),
       delivery: deliveryMode,
       address: deliveryMode === "delivery" ? address : null,
+      lat: point ? point.lat : null,
+      lon: point ? point.lon : null,
+      no_point: isDelivery && !point,
       name: name,
       phone: phone,
       comment: comment || null
@@ -1024,6 +1146,7 @@
         })
         .then(function(){
           saveCustomerInfo({ name: name, phone: phone, address: address });
+          saveLastPoint(point);
           if (tg.close) tg.close();
         })
         .catch(function(err){
@@ -1034,6 +1157,7 @@
       // Запасной путь: initData пуст (кнопка обычной клавиатуры на Desktop) —
       // заказ передаётся боту через sendData.
       saveCustomerInfo({ name: name, phone: phone, address: address });
+      saveLastPoint(point);
       tg.sendData(JSON.stringify(order));
       setTimeout(function(){ if (tg.close) tg.close(); }, 250);
     } else {
@@ -1132,7 +1256,11 @@
     body.innerHTML = "";
     ABOUT_SECTIONS.forEach(function(sec){
       var text = (info[sec.key] || "").trim();
-      if (!text || text.indexOf("ЗАПОЛНИТЬ") === 0) return;
+      if (!text || text.indexOf("ЗАПОЛНИТЬ") === 0) text = "";
+      // Часы доставки из настроек доставки — первой строкой раздела «Доставка».
+      var hours = sec.key === "delivery" ? (info.delivery_hours || "").trim() : "";
+      if (hours) text = text ? hours + "\n" + text : hours;
+      if (!text) return;
       var row = document.createElement("div");
       row.className = "about-section";
       row.innerHTML = '<h3>' + sec.title + '</h3><p></p>';
