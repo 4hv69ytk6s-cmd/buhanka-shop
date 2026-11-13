@@ -189,6 +189,12 @@
     position:relative;
   }
   .card-art svg{width:52%;height:52%;}
+  .card-art, .card-name{cursor:pointer;}
+  /* Карточка товара (открывается по картинке или названию) */
+  .product-art{aspect-ratio:1.6/1;max-height:30vh;width:100%;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;background:var(--surface-alt);}
+  .product-art svg{width:38%;height:38%;}
+  .product-unit{color:var(--muted);font-size:13.5px;margin:10px 0 4px;}
+  .product-price{font-weight:800;font-size:20px;font-variant-numeric:tabular-nums;margin:4px 0 14px;}
   .card-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:3px;flex:1;}
   .card-name{font-family:"Fraunces",serif;font-weight:600;font-size:15px;line-height:1.2;}
   .card-desc{font-size:11.5px;color:var(--muted);line-height:1.35;min-height:29px;}
@@ -565,6 +571,17 @@
   </div>
 </div>
 
+<!-- Product sheet -->
+<div class="scrim" id="scrimProduct"></div>
+<div class="sheet" id="sheetProduct">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h2 id="productName"></h2>
+    <button class="sheet-close" id="closeProduct">&times;</button>
+  </div>
+  <div class="sheet-body" id="productBody"></div>
+</div>
+
 <!-- Orders sheet -->
 <div class="scrim" id="scrimOrders"></div>
 <div class="sheet" id="sheetOrders">
@@ -673,6 +690,115 @@
   var MAX_QTY = 99; // то же ограничение проверяет сервер (MAX_ITEM_QTY)
   var MAX_GRAMS = 9980; // для весовых товаров — сервер (MAX_ITEM_GRAMS)
 
+  /* ---------------- Действия покупателя (для личных предложений) ---------------- */
+  // Только действие, номер товара, секунды, раздел/шаг — никогда то, что вводят в поля.
+  // Копим и шлём пачкой раз в 5 с и при закрытии; любой сбой молча пропускаем —
+  // витрина и заказ от этого не зависят. Кто это — сервер берёт из подписи Telegram.
+  var signed = !!(tg && tg.initData);
+  var VISIT = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  var actionQueue = [];
+
+  function track(action, extra){
+    if (!signed) return;
+    try {
+      var item = { action: action, visit: VISIT, t: Date.now() };
+      if (extra) Object.keys(extra).forEach(function(k){ item[k] = extra[k]; });
+      actionQueue.push(item);
+    } catch(e){}
+  }
+
+  function postSigned(path, body, onClose){
+    body.init_data = tg.initData;
+    var text = JSON.stringify(body);
+    // text/plain — браузер не делает лишний запрос-проверку; при закрытии — sendBeacon.
+    if (onClose && navigator.sendBeacon){
+      try { if (navigator.sendBeacon(API_BASE_URL + path, new Blob([text], { type: "text/plain" }))) return Promise.resolve(); } catch(e){}
+    }
+    return fetch(API_BASE_URL + path, { method: "POST", headers: { "Content-Type": "text/plain" }, body: text, keepalive: true });
+  }
+
+  function flushActions(onClose){
+    flushCartChanges();
+    if (!signed || !actionQueue.length) return;
+    var now = Date.now();
+    var batch = actionQueue.splice(0, actionQueue.length).map(function(it){
+      it.ago = Math.round((now - it.t) / 1000); delete it.t; return it;
+    });
+    try { postSigned("/api/actions", { actions: batch }, onClose).catch(function(){}); } catch(e){}
+  }
+  setInterval(function(){ flushActions(false); }, 5000);
+
+  // Зажатие «+»/«−» повторяет шаг 9 раз в секунду — копим шаги по товару и пишем одну
+  // строку (qty — сколько шагов), когда человек перестал нажимать на 1,5 с или при отправке.
+  var cartChange = null, cartChangeTimer = null;
+  function trackCartChange(id, delta){
+    if (!signed) return;
+    var dir = delta > 0 ? 1 : -1;
+    if (cartChange && (cartChange.id !== id || cartChange.dir !== dir)) flushCartChanges();
+    if (!cartChange) cartChange = { id: id, dir: dir, steps: 0, t: Date.now() };
+    cartChange.steps += 1;
+    clearTimeout(cartChangeTimer);
+    cartChangeTimer = setTimeout(flushCartChanges, 1500);
+  }
+  function flushCartChanges(){
+    clearTimeout(cartChangeTimer);
+    if (!cartChange) return;
+    var c = cartChange; cartChange = null;
+    var p = byId[c.id];
+    actionQueue.push({ action: c.dir > 0 ? "cart_add" : "cart_remove", visit: VISIT, t: c.t,
+                       product_id: Number(c.id), qty: c.steps, seen: { price: p ? p.price : undefined } });
+  }
+
+  // Корзина на сервере: возвращается при следующем заходе.
+  var cartLoaded = false, cartDirty = false, cartTimer = null;
+  function saveCartSoon(){
+    if (!signed) return;
+    cartDirty = true;
+    clearTimeout(cartTimer);
+    cartTimer = setTimeout(function(){ saveCartNow(false); }, 1500);
+  }
+  function saveCartNow(onClose){
+    if (!signed || !cartDirty || !cartLoaded) return;
+    cartDirty = false;
+    clearTimeout(cartTimer);
+    try { postSigned("/api/cart", { items: cart }, onClose).catch(function(){}); } catch(e){}
+  }
+  function loadSavedCart(done){
+    if (!signed){ cartLoaded = true; done(); return; }
+    postSigned("/api/cart/get", {}, false)
+      .then(function(res){ if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+      .then(function(data){
+        // Пока грузилось, человек уже что-то положил — оставляем его выбор.
+        if (Object.keys(cart).length === 0 && data && data.items){
+          Object.keys(data.items).forEach(function(id){ if (byId[id]) cart[id] = data.items[id]; });
+        }
+      })
+      .catch(function(){})
+      .then(function(){ cartLoaded = true; if (cartDirty) saveCartSoon(); done(); });
+  }
+
+  var closedSent = false;
+  function onLeave(){
+    if (closedSent) return;
+    closedSent = true;
+    closeProductTracking();
+    track("close");
+    flushActions(true);
+    saveCartNow(true);
+  }
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState === "hidden") onLeave();
+    else {
+      closedSent = false;
+      // Вернулся к открытой карточке — секунды считаются заново.
+      if (lastViewed && sheetProduct.classList.contains("show")){ viewing = lastViewed; viewStart = Date.now(); }
+    }
+  });
+  window.addEventListener("pagehide", onLeave);
+
+  // Откуда открыли: метка из кнопки/ссылки (?startapp=…) — сервер всё равно берёт её из подписи.
+  track("open");
+
   /* ---------------- Data ---------------- */
   var ICONS = {
     bread: '<svg viewBox="0 0 48 48" fill="none"><path d="M6 24c0-9 8-15 18-15s18 6 18 15c0 8-6 13-18 13S6 32 6 24Z" fill="var(--accent2)" opacity=".18"/><path d="M6 24c0-9 8-15 18-15s18 6 18 15c0 8-6 13-18 13S6 32 6 24Z" stroke="var(--accent2)" stroke-width="1.8"/><path d="M14 18c0-3.2 4-5 10-5s10 1.8 10 5" stroke="var(--accent2)" stroke-width="1.6" stroke-linecap="round"/><path d="M16 25c1.5 1.5 3 1.5 4.5 0M23.5 25c1.5 1.5 3 1.5 4.5 0M31 25c1.5 1.5 3 1.5 4.5 0" stroke="var(--accent2)" stroke-width="1.4" stroke-linecap="round"/></svg>',
@@ -747,7 +873,7 @@
       var b = document.createElement("button");
       b.className = "chip" + (sec.cat === currentCat ? " active" : "");
       b.textContent = sec.cat;
-      b.onclick = function(){ currentCat = sec.cat; renderChips(); renderGrid(); };
+      b.onclick = function(){ currentCat = sec.cat; renderChips(); renderGrid(); track("section", { detail: sec.cat }); };
       chipsEl.appendChild(b);
     });
   }
@@ -800,8 +926,49 @@
 
     body.appendChild(foot);
     card.appendChild(body);
+    art.onclick = function(){ openProduct(p); };
+    body.querySelector(".card-name").onclick = function(){ openProduct(p); };
     return card;
   }
+
+  /* ---------------- Карточка товара ---------------- */
+  var sheetProduct = document.getElementById("sheetProduct");
+  var scrimProduct = document.getElementById("scrimProduct");
+  var viewing = null, viewStart = 0, lastViewed = null;
+
+  function openProduct(p){
+    closeProductTracking();
+    document.getElementById("productName").textContent = p.name;
+    var body = document.getElementById("productBody");
+    body.innerHTML =
+      '<div class="product-art">' + ICONS[p._icon] + '</div>' +
+      '<div class="product-unit"></div>' +
+      '<div class="product-price">' + fmt(p.price) + '</div>';
+    body.querySelector(".product-unit").textContent = p.desc || "";
+    var ctrl = document.createElement("div");
+    ctrl.id = "pctrl-" + p.id;
+    renderCtrl(ctrl, p);
+    body.appendChild(ctrl);
+    sheetProduct.classList.add("show");
+    scrimProduct.classList.add("show");
+    viewing = p; lastViewed = p; viewStart = Date.now();
+  }
+  // Сколько секунд смотрел карточку — пишется при закрытии (и при сворачивании витрины).
+  function closeProductTracking(){
+    if (!viewing) return;
+    track("view_product", { product_id: viewing.id, duration: Math.round((Date.now() - viewStart) / 1000),
+                            seen: { price: viewing.price } });
+    viewing = null;
+  }
+  function closeProductFn(){
+    closeProductTracking();
+    sheetProduct.classList.remove("show");
+    scrimProduct.classList.remove("show");
+    var ctrl = document.querySelector('[id^="pctrl-"]');
+    if (ctrl) ctrl.id = "";
+  }
+  document.getElementById("closeProduct").onclick = closeProductFn;
+  scrimProduct.onclick = closeProductFn;
 
   function renderCtrl(el, p){
     var q = qtyOf(p.id);
@@ -842,6 +1009,8 @@
     var nowZero = q <= 0;
     if (nowZero) delete cart[id]; else cart[id] = q;
     if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+    trackCartChange(id, delta);
+    saveCartSoon();
 
     if (wasZero !== nowZero){
       // переход "нет в корзине" <-> "есть" — меняется сама разметка (кнопка
@@ -850,6 +1019,8 @@
       if (ctrlEl) renderCtrl(ctrlEl, byId[id]);
       var cctrl = document.getElementById("cctrl-" + id);
       if (cctrl) renderCtrl(cctrl, byId[id]);
+      var pctrl = document.getElementById("pctrl-" + id);
+      if (pctrl) renderCtrl(pctrl, byId[id]);
     } else {
       // количество меняется в пределах степпера — обновляем только текст,
       // не трогая сами кнопки (важно для непрерывного зажатия +/-)
@@ -904,6 +1075,7 @@
     renderCartBody();
     sheetCart.classList.add("show");
     scrimCart.classList.add("show");
+    track("cart_open");
   }
   function closeCartFn(){
     sheetCart.classList.remove("show");
@@ -960,6 +1132,7 @@
     document.getElementById("sumTotal").textContent = fmt(cartTotal());
     sheetCheckout.classList.add("show");
     scrimCheckout.classList.add("show");
+    track("checkout_step", { detail: "form" });
 
     var nameInput = document.getElementById("name");
     var phoneInput = document.getElementById("phone");
@@ -987,6 +1160,7 @@
       segBtns.forEach(function(x){ x.classList.remove("active"); });
       b.classList.add("active");
       deliveryMode = b.getAttribute("data-val");
+      track("checkout_step", { detail: deliveryMode === "delivery" ? "delivery" : "pickup" });
       document.getElementById("addressField").hidden = (deliveryMode !== "delivery");
       if (deliveryMode === "delivery") showDeliveryMap();
       if (deliveryMode === "delivery") loadDeliveryHours();
@@ -1132,6 +1306,9 @@
     if (tg && tg.initData){
       // Основной путь: заказ уходит на сервер с подписанным initData, поэтому
       // работает при любом способе открытия мини-аппа (клавиатура, inline, меню).
+      track("checkout_step", { detail: "submit" });
+      // Отложенное сохранение корзины не должно прийти после заказа и вернуть её.
+      clearTimeout(cartTimer); cartDirty = false;
       order.init_data = tg.initData;
       fetch(API_BASE_URL + "/api/orders", {
         method: "POST",
@@ -1148,9 +1325,14 @@
         .then(function(){
           saveCustomerInfo({ name: name, phone: phone, address: address });
           saveLastPoint(point);
+          // Сервер уже очистил запомненную корзину — не сохранять её заново при закрытии.
+          cart = {}; cartDirty = false; clearTimeout(cartTimer);
+          track("checkout_step", { detail: "done" });
+          flushActions(true);
           if (tg.close) tg.close();
         })
         .catch(function(err){
+          track("checkout_step", { detail: "error" });
           showToast((err && err.serverMessage) || "Не удалось отправить заказ. Попробуйте ещё раз");
           resetBtn();
         });
@@ -1320,6 +1502,15 @@
       renderChips();
       renderGrid();
       updateCartBar();
+      // Корзина с прошлого раза (сервер). Не пришла — витрина работает как раньше.
+      loadSavedCart(function(){
+        if (!Object.keys(cart).length) return;
+        renderGrid();
+        updateCartBar();
+        if (sheetCart.classList.contains("show")) renderCartBody();
+        var pctrl = document.querySelector('[id^="pctrl-"]');
+        if (pctrl && viewing) renderCtrl(pctrl, viewing);
+      });
     })
     .catch(function(err){
       mainEl.innerHTML = '<div class="empty-cart"><p>Не удалось загрузить меню. Попробуйте открыть ещё раз позже.</p></div>';
