@@ -797,7 +797,10 @@
   window.addEventListener("pagehide", onLeave);
 
   // Откуда открыли: метка из кнопки/ссылки (?startapp=…) — сервер всё равно берёт её из подписи.
-  track("open");
+  // Кнопка под предложением добавляет ?offer=<номер> — сервер засчитает «нажал», только если
+  // это предложение отправлено именно этому человеку (по подписи Telegram).
+  var offerMatch = /[?&]offer=(\d{1,9})(&|$)/.exec(location.search);
+  track("open", offerMatch ? { offer: Number(offerMatch[1]) } : null);
 
   /* ---------------- Data ---------------- */
   var ICONS = {
